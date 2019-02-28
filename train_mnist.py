@@ -18,7 +18,7 @@ MAX_STEPS = 50
 LR = 0.01
 LOGGING_STEPS = 5
 DEVICE = 'cuda'
-EPOCHS = 5
+EPOCHS = 35
 
 # GLOBAL stuff
 WRITER = SummaryWriter('./logs')
