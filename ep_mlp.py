@@ -4,8 +4,6 @@ https://github.com/bscellier/Towards-a-Biologically-Plausible-Backprop/blob/mast
 import torch
 from torch.nn import init
 from torch import matmul
-import numpy as np
-import math
 from torch import autograd
 
 
@@ -39,6 +37,7 @@ class Linear:
         else:
             self.bias_in = None
             self.bias_out = None
+
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -84,11 +83,11 @@ class Linear:
 
         # Free phase grad
         free_energy = self.get_energy(free_inp, free_out)
-        free_grads = autograd.grad(torch.sum(free_energy), params)
+        free_grads = autograd.grad(torch.mean(free_energy), params)
 
         # Clamp phase grad
         clamp_energy = self.get_energy(clamp_inp, clamp_out)
-        clamp_grads = autograd.grad(torch.sum(clamp_energy), params)
+        clamp_grads = autograd.grad(torch.mean(clamp_energy), params)
         for param, free_grad, clamp_grad in zip(params, free_grads, clamp_grads):
             param.grad = clamp_grad - free_grad
 
@@ -147,6 +146,7 @@ class EPMLP(object):
     def get_cost(self, states, label):
         """ l2 loss """
         out = states[-1]
+        out = self._non_linear(out)
         return (out - label).pow(2).sum(-1, keepdim=True)
 
     def init_out(self, batch_size, requires_grad=False):
@@ -210,4 +210,3 @@ class EPMLP(object):
         for layer in self._layers:
             res += layer.parameters()
         return res
-
