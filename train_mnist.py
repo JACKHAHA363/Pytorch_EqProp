@@ -18,7 +18,7 @@ MAX_STEPS = 50
 LR = 0.01
 LOGGING_STEPS = 5
 DEVICE = 'cuda'
-
+EPOCHS = 5
 
 # GLOBAL stuff
 WRITER = SummaryWriter('./logs')
@@ -83,7 +83,9 @@ def get_opt(model):
 def get_avg_cost_and_corrects(free_states, labels, model):
     avg_costs = torch.mean(model.get_cost(free_states, labels))
     out = free_states[-1]
-    avg_corrects = torch.mean(torch.sum(out * labels, -1))
+    preds = out.max(1)[1]
+    trus = labels.max(1)[1]
+    avg_corrects = (preds == trus).float().mean()
     return avg_costs.item(), avg_corrects.item()
 
 
@@ -140,13 +142,12 @@ def validate(solver, model, dataloader, global_step):
         acc_stats.record(avg_corrects, imgs.size(0))
         cost_stats.record(avg_cost, imgs.size(0))
     print('At step {}, '
-          'validation cost： {：.4f}, '
+          'validation cost： {:.4f}, '
           'validation acc: {:.2f}'.format(global_step,
                                           cost_stats.get_avg(),
                                           acc_stats.get_avg() * 100))
     WRITER.add_scalar('valid/cost', cost_stats.get_avg(), global_step=global_step)
     WRITER.add_scalar('valid/acc', acc_stats.get_avg() * 100, global_step=global_step)
-    return global_step
 
 
 def main():
@@ -155,8 +156,12 @@ def main():
     opt = get_opt(model)
     print('Train on {}'.format(model.device))
     global_step = 0
-    train(solver, model, opt, train_loader, global_step)
-    validate(solver, model, val_loader, global_step)
+    epoch = 0
+    while epoch < EPOCHS:
+        global_step = train(solver, model, opt, val_loader, global_step)
+        validate(solver, model, val_loader, global_step)
+        epoch += 1
+
 
 
 if __name__ == '__main__':
