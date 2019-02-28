@@ -10,14 +10,14 @@ from fp_solver import FixedStepSolver
 from tensorboardX import SummaryWriter
 
 # ARGS
-BATCH_SIZE = 32
+BATCH_SIZE = 128
 HIDDEN_SIZES = [500]
 STEP_SIZE = 0.5
 MAX_STEPS = 50
 LR = 0.01
 LOGGING_STEPS = 5
 DEVICE = 'cpu'
-#DEVICE = 'cuda'
+DEVICE = 'cuda'
 
 # GLOBAL stuff
 WRITER = SummaryWriter('./logs')
