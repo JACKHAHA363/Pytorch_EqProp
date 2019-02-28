@@ -91,6 +91,20 @@ class Linear:
         for param, free_grad, clamp_grad in zip(params, free_grads, clamp_grads):
             param.grad = clamp_grad - free_grad
 
+    def train(self):
+        """ Set to train mode """
+        self.weight.requires_grad = True
+        if self.bias_out is not None:
+            self.bias_out.requires_grad = True
+            self.bias_in.requires_grad = True
+
+    def eval(self):
+        """ Set to eval mode """
+        self.weight.requires_grad = False
+        if self.bias_out is not None:
+            self.bias_out.requires_grad = False
+            self.bias_in.requires_grad = False
+
 
 class EPMLP(object):
 
@@ -113,11 +127,6 @@ class EPMLP(object):
                                     out_features=layer_sizes[idx + 1])]
         self._non_linear = non_linear if non_linear is not None \
             else lambda x: torch.clamp(x, min=0, max=1)
-
-    def cuda(self):
-        """ Use GPU """
-        for layer in self._layers:
-            self._layers.cuda()
 
     def get_state_shapes(self):
         """ The shape of state """
@@ -210,3 +219,13 @@ class EPMLP(object):
         for layer in self._layers:
             res += layer.parameters()
         return res
+
+    def train(self):
+        """ Train mode """
+        for layer in self._layers:
+            layer.train()
+
+    def eval(self):
+        """ Eval mode """
+        for layer in self._layers:
+            layer.eval()

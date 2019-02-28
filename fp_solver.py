@@ -28,8 +28,6 @@ class FixedStepSolver(FixedPointSolver):
         step = 0
         while step < self.max_steps:
             energy = energy_fn(states)
-            #if step % 10 == 0:
-            #    print(torch.sum(energy).item())
             grads = autograd.grad(-torch.sum(energy), states)
             for tensor, grad in zip(states, grads):
                 tensor[:] = tensor + self.step_size * grad
