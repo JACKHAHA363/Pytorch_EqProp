@@ -26,14 +26,15 @@ def unflatten(flattened, shapes):
 
 class Linear:
     """ A linear layer in EP """
-    def __init__(self, in_features, out_features, bias=True):
+    def __init__(self, in_features, out_features, bias=True, device=None):
         self.in_features = in_features
         self.out_features = out_features
-        self.weight = torch.Tensor(out_features, in_features)
+        self.device = torch.device(device) if device is not None else torch.device('cpu')
+        self.weight = torch.Tensor(out_features, in_features).to(device=self.device)
 
         if bias:
-            self.bias_in = torch.Tensor(in_features)
-            self.bias_out = torch.Tensor(out_features)
+            self.bias_in = torch.Tensor(in_features).to(device=device)
+            self.bias_out = torch.Tensor(out_features).to(device=device)
         else:
             self.bias_in = None
             self.bias_out = None
@@ -61,16 +62,6 @@ class Linear:
             neg_energy += matmul(inputs, self.bias_in[:, None]) + matmul(outputs, self.bias_out[:, None])
         return -neg_energy
 
-    def to(self, *args, **kwargs):
-        self.weight.to(*args, **kwargs)
-        if self.bias_out is not None:
-            self.bias_out.to(*args, **kwargs)
-            self.bias_in.to(*args, **kwargs)
-
-    @property
-    def device(self):
-        return self.weight.device
-
     def parameters(self):
         params = [self.weight]
         if self.bias_in is not None:
@@ -91,24 +82,10 @@ class Linear:
         for param, free_grad, clamp_grad in zip(params, free_grads, clamp_grads):
             param.grad = clamp_grad - free_grad
 
-    def train(self):
-        """ Set to train mode """
-        self.weight.requires_grad = True
-        if self.bias_out is not None:
-            self.bias_out.requires_grad = True
-            self.bias_in.requires_grad = True
-
-    def eval(self):
-        """ Set to eval mode """
-        self.weight.requires_grad = False
-        if self.bias_out is not None:
-            self.bias_out.requires_grad = False
-            self.bias_in.requires_grad = False
-
 
 class EPMLP(object):
 
-    def __init__(self, in_size, out_size, hidden_sizes, non_linear=None):
+    def __init__(self, in_size, out_size, hidden_sizes, non_linear=None, device=None):
         """
         :param in_size: int
         :param out_size: int
@@ -124,7 +101,8 @@ class EPMLP(object):
         self._layers = []
         for idx in range(len(layer_sizes) - 1):
             self._layers += [Linear(in_features=layer_sizes[idx],
-                                    out_features=layer_sizes[idx + 1])]
+                                    out_features=layer_sizes[idx + 1],
+                                    device=device)]
         self._non_linear = non_linear if non_linear is not None \
             else lambda x: torch.clamp(x, min=0, max=1)
 
@@ -160,22 +138,26 @@ class EPMLP(object):
 
     def init_out(self, batch_size, requires_grad=False):
         """ Return a random output """
-        return torch.rand([batch_size, self._out_size], requires_grad=requires_grad)
+        return torch.rand([batch_size, self._out_size], requires_grad=requires_grad).to(device=self.device)
 
     def init_hiddens(self, batch_size, requires_grad=False):
         """ Return hidden units """
-        return [torch.rand([batch_size, self._layers[idx].out_features], requires_grad=requires_grad)
+        return [torch.rand([batch_size, self._layers[idx].out_features],
+                           requires_grad=requires_grad).to(device=self.device)
                 for idx in range(len(self._layers) - 1)]
 
     def get_init_states(self, batch_size, hidden_units=None, out=None, requires_grad=False):
         """ Return a list of tensors """
-        hidden_units = [t.clone() for t in hidden_units] if hidden_units is not None else self.init_hiddens(batch_size, requires_grad)
-        out = out.clone() if out is not None else self.init_out(batch_size, requires_grad)
-        return hidden_units + [out]
+        hidden_units = [t.clone().to(device=t.device) for t in hidden_units] if hidden_units is not None \
+            else self.init_hiddens(batch_size, requires_grad)
+        out = out.clone().to(device=out.device) if out is not None \
+            else self.init_out(batch_size, requires_grad)
 
-    def to(self, *args, **kwargs):
-        for layer in self._layers:
-            layer.to(*args, **kwargs)
+        # Put to corresponding device
+        for t in hidden_units:
+            t = t.to(device=self.device)
+        out.to(device=self.device)
+        return hidden_units + [out]
 
     @property
     def device(self):
@@ -219,13 +201,3 @@ class EPMLP(object):
         for layer in self._layers:
             res += layer.parameters()
         return res
-
-    def train(self):
-        """ Train mode """
-        for layer in self._layers:
-            layer.train()
-
-    def eval(self):
-        """ Eval mode """
-        for layer in self._layers:
-            layer.eval()

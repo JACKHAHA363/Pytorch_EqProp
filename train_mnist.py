@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 from ep_mlp import EPMLP
 from fp_solver import FixedStepSolver
 from tensorboardX import SummaryWriter
+from time import time
 
 # ARGS
 BATCH_SIZE = 128
@@ -16,8 +17,8 @@ STEP_SIZE = 0.5
 MAX_STEPS = 50
 LR = 0.01
 LOGGING_STEPS = 5
-DEVICE = 'cpu'
 DEVICE = 'cuda'
+
 
 # GLOBAL stuff
 WRITER = SummaryWriter('./logs')
@@ -69,7 +70,7 @@ def get_data_loaders():
 
 
 def get_model():
-    model = EPMLP(784, 10, HIDDEN_SIZES)
+    model = EPMLP(784, 10, HIDDEN_SIZES, device=torch.device(DEVICE))
     solver = FixedStepSolver(step_size=STEP_SIZE, max_steps=MAX_STEPS)
     return model, solver
 
@@ -89,17 +90,21 @@ def get_avg_cost_and_corrects(free_states, labels, model):
 def train(solver, model, opt, dataloader, global_step):
     acc_stats = RunningAvg()
     cost_stats = RunningAvg()
-    model.train()
     device = model.device
     for imgs, labels in dataloader:
-        imgs.to(device=device)
-        labels.to(device=device)
+        imgs = imgs.to(device=device)
+        labels = labels.to(device=device)
+        start = time()
         free_states = model.free_phase(imgs, solver)
         clamp_states = model.clamp_phase(imgs, labels, solver, 1,
                                          out=free_states[-1],
                                          hidden_units=free_states[:-1])
+        fp_time = time() - start
+
         opt.zero_grad()
+        start = time()
         model.set_gradients(imgs, free_states, clamp_states)
+        grad_time = time() - start
         opt.step()
         global_step += 1
 
@@ -109,9 +114,10 @@ def train(solver, model, opt, dataloader, global_step):
         acc_stats.record(avg_corrects, imgs.size(0))
         cost_stats.record(avg_cost, imgs.size(0))
         if global_step % LOGGING_STEPS == 0:
-            print('At step {}, cost: {:.4f}, acc: {:.2f}'.format(global_step,
-                                                                 cost_stats.get_avg(),
-                                                                 acc_stats.get_avg() * 100))
+            print('At step {}, cost: {:.4f}, acc: {:.2f}, '
+                  'fp time: {:.3f}, grad time: {:.3f}'.format(global_step,
+                                                              cost_stats.get_avg(),
+                                                              acc_stats.get_avg() * 100, fp_time, grad_time))
             WRITER.add_scalar('train/cost', cost_stats.get_avg(), global_step=global_step)
             WRITER.add_scalar('train/acc', acc_stats.get_avg() * 100, global_step=global_step)
             acc_stats.reset()
@@ -122,11 +128,10 @@ def train(solver, model, opt, dataloader, global_step):
 def validate(solver, model, dataloader, global_step):
     acc_stats = RunningAvg()
     cost_stats = RunningAvg()
-    model.eval()
     device = model.device
     for imgs, labels in dataloader:
-        imgs.to(device)
-        labels.to(device)
+        imgs = imgs.to(device)
+        labels = labels.to(device)
         free_states = model.free_phase(imgs, solver)
 
         # Record stats and report
@@ -147,8 +152,8 @@ def validate(solver, model, dataloader, global_step):
 def main():
     train_loader, val_loader = get_data_loaders()
     model, solver = get_model()
-    model.to(device=torch.device(DEVICE))
     opt = get_opt(model)
+    print('Train on {}'.format(model.device))
     global_step = 0
     train(solver, model, opt, train_loader, global_step)
     validate(solver, model, val_loader, global_step)
