@@ -158,7 +158,7 @@ def main():
     global_step = 0
     epoch = 0
     while epoch < EPOCHS:
-        global_step = train(solver, model, opt, val_loader, global_step)
+        global_step = train(solver, model, opt, train_loader, global_step)
         validate(solver, model, val_loader, global_step)
         epoch += 1
 
